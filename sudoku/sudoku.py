@@ -1,5 +1,5 @@
 import numpy
-import time
+from typing import Union
 
 
 class Board(dict):
@@ -43,28 +43,39 @@ class Board(dict):
             for row in range(self.start, self.stop):
                 yield self[row]
 
-    def __init__(self, unit: int):
+    def __init__(self, arg: "Union[Board, int]"):
         super().__init__()
-        self.unit = unit
-        self.numbers = {x+1 for x in range(self.unit**2)}
+        if isinstance(arg, Board):
+            self.unit = arg.unit
+            for k, v in arg.items():
+                self[k] = v
+        else:
+            self.unit = arg
+        self.rows = self.unit ** 2
+        self.cols = self.rows
+        self.numbers = {x+1 for x in range(self.unit ** 2)}
 
     def __getitem__(self, item):
         if isinstance(item, int):
             return self.Row(self, item)
         return super().__getitem__(item) if item in self else None
 
-    def insert(self, *rows):
-        for r, row in enumerate(rows):
-            for c, col in enumerate(row):
-                self[r][c] = col
-
-    @property
-    def rows(self):
-        return self.unit ** 2
-
-    @property
-    def cols(self):
-        return self.unit ** 2
+    def __setitem__(self, key, value):
+        if not (isinstance(key, tuple) and len(key) == 2):
+            raise ValueError(
+                "{} keys must be Tuple[int, int], not {}".format(
+                    type(self).__name__,
+                    type(key).__name__
+                )
+            )
+        if not isinstance(value, (int, numpy.int64)):
+            raise ValueError(
+                "{} values must be int, not {}".format(
+                    type(self).__name__,
+                    type(value).__name__
+                )
+            )
+        super().__setitem__(key, value)
 
     def row(self, row):
         return self.Row(self, row)
@@ -78,6 +89,9 @@ class Board(dict):
         for row in range(startrow, startrow+self.unit):
             for col in range(startcol, startcol+self.unit):
                 yield self[row][col]
+
+    def block_number(self, row, col):
+        return (row // self.unit) * self.unit + (col // self.unit)
 
     def check(self):
         for i in range(self.unit ** 2):
@@ -110,32 +124,51 @@ class Board(dict):
 
 
 def generate_board(unit=3, max_attempts=1000):
-    t0 = time.time()
-    max_row = 0
+    max_row = row = i = 0
     for i in range(1, 1 + max_attempts):
         board = Board(unit)
-        count = board.unit ** 2
         try:
-            for row in range(count):
-                for col in range(count):
-                    block = (row // board.unit) * board.unit + (col // board.unit)
-                    available = list(board.numbers - (set(board.row(row)) | set(board.col(col)) | set(board.block(block)) ))
+            for row in range(board.rows):
+                for col in range(board.cols):
+                    available = list(
+                        board.numbers - (
+                                set(board.row(row)) |
+                                set(board.col(col)) |
+                                set(board.block(board.block_number(row, col)))
+                        )
+                    )
                     board[row][col] = numpy.random.choice(available)
-            # print()
-            # print("Success after {} attempts.".format(i))
+            print("\rMax Row {:>2} after {} attempts".format(max_row, i))
             return board
         except ValueError:
             max_row = row if row > max_row else max_row
-    #         print("Max Row {:>2}".format(max_row), end='\r')
-    # print()
+            print("\rMax Row {:>2} after {} attempts".format(max_row, i), end='')
+    print("\rMax Row {:>2} after {} attempts".format(max_row, i))
     return None
 
 
+def cull_board(board, cull_value):
+    board_copy = Board(board)
+    if isinstance(cull_value, float):
+        number_to_delete = int(cull_value * (board_copy.unit ** 4))
+    elif isinstance(cull_value, int):
+        number_to_delete = cull_value
+    else:
+        raise ValueError(
+            "cull_value must be of type int or float, not {}".format(type(cull_value).__name__)
+        )
+    if number_to_delete > len(board_copy):
+        number_to_delete = len(board_copy)
+    for i in range(number_to_delete):
+        keys = list(board_copy.keys())
+        key = keys[numpy.random.choice(len(keys))]
+        del board_copy[key]
+    return board_copy
+
+
 if __name__ == "__main__":
-    board = generate_board(3)
+    board = generate_board(3, 10000)
     if board:
-        number_to_delete = int(0.6 * (board.unit ** 4))
-        for i in range(number_to_delete):
-            keys = list(board.keys())
-            del board[keys[numpy.random.choice(len(keys))]]
-    print(board)
+        print(cull_board(board, 0.6))
+    else:
+        print("Failed to generate")
