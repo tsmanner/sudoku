@@ -1,5 +1,12 @@
+from collections import defaultdict
 import numpy
 from typing import Union
+
+
+class InvalidValueError(BaseException):
+    def __init__(self, message, fails):
+        super().__init__(message)
+        self.fails = fails
 
 
 class Board(dict):
@@ -77,6 +84,11 @@ class Board(dict):
             )
         super().__setitem__(key, value)
 
+    def values(self):
+        for row in range(self.rows):
+            for value in self.row(row):
+                yield value
+
     def row(self, row):
         return self.Row(self, row)
 
@@ -94,16 +106,34 @@ class Board(dict):
         return (row // self.unit) * self.unit + (col // self.unit)
 
     def check(self):
-        for i in range(self.unit ** 2):
-            # Check Row
-            if set(self.row(i)) != self.numbers:
-                raise ValueError("Invalid Row {} Values {}!".format(i, list(self.row(i))))
-            # Check Column
-            if set(self.col(i)) != self.numbers:
-                raise ValueError("Invalid Row {} Values {}!".format(i, list(self.col(i))))
-            # Check Block
-            if set(self.block(i)) != self.numbers:
-                raise ValueError("Invalid Block {} Values {}!".format(i, list(self.block(i))))
+        fails = defaultdict(lambda: False)
+        for row in range(self.rows):
+            for col in range(self.cols):
+                if (row, col) in self:
+                    check_value = self[(row, col)]
+                    values = set()
+                    for value in self.row(row):
+                        if value in values and value == check_value:
+                            fails[(row, col)] = True
+                        else:
+                            values.add(value)
+
+                    values = set()
+                    for value in self.col(col):
+                        if value in values and value == check_value:
+                            fails[(row, col)] = True
+                        else:
+                            values.add(value)
+
+                    values = set()
+                    for value in self.block(self.block_number(row, col)):
+                        if value in values and value == check_value:
+                            fails[(row, col)] = True
+                        else:
+                            values.add(value)
+
+        if len(fails):
+            raise InvalidValueError("Invalid Solution".format(), fails)
 
     def __repr__(self):
         lines = []
@@ -123,7 +153,7 @@ class Board(dict):
         return '\n'.join(lines)
 
 
-def generate_board(unit=3, max_attempts=1000):
+def generate_board(unit=3, max_attempts=10000):
     max_row = row = i = 0
     for i in range(1, 1 + max_attempts):
         board = Board(unit)
@@ -138,12 +168,12 @@ def generate_board(unit=3, max_attempts=1000):
                         )
                     )
                     board[row][col] = numpy.random.choice(available)
-            print("\rMax Row {:>2} after {} attempts".format(max_row, i))
+            # print("\rMax Row {:>2} after {} attempts".format(max_row, i))
             return board
         except ValueError:
             max_row = row if row > max_row else max_row
-            print("\rMax Row {:>2} after {} attempts".format(max_row, i), end='')
-    print("\rMax Row {:>2} after {} attempts".format(max_row, i))
+            # print("\rMax Row {:>2} after {} attempts".format(max_row, i), end='')
+    # print("\rMax Row {:>2} after {} attempts".format(max_row, i))
     return None
 
 
@@ -169,6 +199,7 @@ def cull_board(board, cull_value):
 if __name__ == "__main__":
     board = generate_board(3, 10000)
     if board:
+        print(board)
         print(cull_board(board, 0.6))
     else:
         print("Failed to generate")
