@@ -1,4 +1,5 @@
 import curses
+import getpass
 from sudoku import Board, InvalidValueError, cull_board, generate_board
 
 
@@ -44,25 +45,37 @@ class CursesBoard:
     def cursor(self, row=None, col=None):
         row = row if row is not None else self.row
         col = col if col is not None else self.col
-        y = row + 1 + row // 3
-        x = 2 * col + 2 + 2 * (col // 3)
+        y = row + 1 + row // self.board.unit
+        x = 2 * col + 2 + 2 * (col // self.board.unit)
         return y, x
 
     def initialize(self):
-        self.screen.addstr( 0, 0, "+-------+-------+-------+")
-        self.screen.addstr( 1, 0, "|       |       |       |")
-        self.screen.addstr( 2, 0, "|       |       |       |")
-        self.screen.addstr( 3, 0, "|       |       |       |")
-        self.screen.addstr( 4, 0, "+-------+-------+-------+")
-        self.screen.addstr( 5, 0, "|       |       |       |")
-        self.screen.addstr( 6, 0, "|       |       |       |")
-        self.screen.addstr( 7, 0, "|       |       |       |")
-        self.screen.addstr( 8, 0, "+-------+-------+-------+")
-        self.screen.addstr( 9, 0, "|       |       |       |")
-        self.screen.addstr(10, 0, "|       |       |       |")
-        self.screen.addstr(11, 0, "|       |       |       |")
-        self.screen.addstr(12, 0, "+-------+-------+-------+")
+        max_row = self.board.rows + 1 + self.board.rows // self.board.unit
+        max_col = 2 * (self.board.cols + self.board.cols // self.board.unit)
+        for row in range(0, max_row):
+            if row % 4 == 0:  # BREAK
+                for col in range(max_col + 1):
+                    self.screen.addch(row, col, curses.ACS_HLINE)
+                if row == 0:  # TOP
+                    for col in range(0, max_col, 2 * self.board.unit + 2):
+                        self.screen.addch(row, col, curses.ACS_TTEE)
+                    self.screen.addch(row, 0, curses.ACS_ULCORNER)
+                    self.screen.addch(row, max_col, curses.ACS_URCORNER)
+                elif row == 12:  # BOTTOM
+                    for col in range(0, max_col, 2 * self.board.unit + 2):
+                        self.screen.addch(row, col, curses.ACS_BTEE)
+                    self.screen.addch(row, 0, curses.ACS_LLCORNER)
+                    self.screen.addch(row, max_col, curses.ACS_LRCORNER)
+                else:
+                    for col in range(0, max_col, 2 * self.board.unit + 2):
+                        self.screen.addch(row, col, curses.ACS_PLUS)
+                    self.screen.addch(row, 0, curses.ACS_LTEE)
+                    self.screen.addch(row, max_col, curses.ACS_RTEE)
+            else:  # INTERIOR
+                for col in range(0, max_col + 1, 2 * self.board.unit + 2):
+                    self.screen.addch(row, col, curses.ACS_VLINE)
         self.refresh()
+        self.message("WELCOME {}!".format(getpass.getuser()).upper())
 
     def refresh(self):
         failmask = self.current_board.check()
@@ -70,10 +83,13 @@ class CursesBoard:
             for col in range(self.current_board.cols):
                 ch = str(self.current_board[(row, col)]) if (row, col) in self.current_board else " "
                 cursor = self.cursor(row, col)
+                options = 0
+
                 if failmask[(row, col)]:
-                    self.screen.addch(*cursor, ch, curses.A_BOLD | curses.color_pair(1))
-                else:
-                    self.screen.addch(*cursor, ch)
+                    options |= curses.A_UNDERLINE | curses.color_pair(1)
+                if (row, col) in self.board:
+                    options |= curses.A_BOLD
+                self.screen.addch(*cursor, ch, options)
         self.screen.move(*self.cursor())
         self.screen.refresh()
 
