@@ -1,12 +1,13 @@
 import curses
-from sudoku import InvalidValueError, cull_board, generate_board
+from sudoku import Board, InvalidValueError, cull_board, generate_board
 
 
 class CursesBoard:
     def __init__(self, screen):
         self.screen = screen
-        curses.init_pair(1, 1, 0)
+        curses.init_pair(1, curses.COLOR_RED, curses.COLOR_BLACK)
         self.board = cull_board(generate_board(), 0.6)
+        self.current_board = Board(self.board)
         self._row = 0
         self._col = 0
         self.initialize()
@@ -18,7 +19,7 @@ class CursesBoard:
 
     @row.setter
     def row(self, value):
-        self._row = value if 0 <= value < self.board.rows else self._row
+        self._row = value if 0 <= value < self.current_board.rows else self._row
         self.screen.move(*self.cursor())
 
     @property
@@ -27,7 +28,7 @@ class CursesBoard:
 
     @col.setter
     def col(self, value):
-        self._col = value if 0 <= value < self.board.cols else self._col
+        self._col = value if 0 <= value < self.current_board.cols else self._col
         self.screen.move(*self.cursor())
 
     @property
@@ -64,12 +65,21 @@ class CursesBoard:
         self.refresh()
 
     def refresh(self):
-        for col in range(self.board.cols):
-            for row in range(self.board.rows):
-                ch = str(self.board[(row, col)]) if (row, col) in self.board else " "
-                y = row + 1 + row // 3
-                x = 2 * col + 2 + 2 * (col // 3)
-                self.screen.addch(y, x, ch)
+        failmask = self.current_board.check()
+        for row in range(self.current_board.rows):
+            for col in range(self.current_board.cols):
+                ch = str(self.current_board[(row, col)]) if (row, col) in self.current_board else " "
+                cursor = self.cursor(row, col)
+                if failmask[(row, col)]:
+                    self.screen.addch(*cursor, ch, curses.A_BOLD | curses.color_pair(1))
+                else:
+                    self.screen.addch(*cursor, ch)
+        self.screen.move(*self.cursor())
+        self.screen.refresh()
+
+    def message(self, message):
+        self.screen.addstr(13, 0, " " * (curses.COLS - 1))
+        self.screen.addstr(13, 0, message)
         self.screen.move(*self.cursor())
         self.screen.refresh()
 
@@ -88,24 +98,24 @@ class CursesBoard:
                 self.col -= 1
             elif ch == 'KEY_RIGHT':
                 self.col += 1
-            elif ch in {'KEY_DC', 'KEY_BACKSPACE', ' '}:
-                del self.board[self.coordinate]
-                self.refresh()
-                self.board.check()
-            else:
-                try:
-                    i = int(ch)
-                    self.board[self.coordinate] = i
+            elif self.coordinate not in self.board:
+                if ch in {'KEY_DC', 'KEY_BACKSPACE', ' '}:
+                    self.message("DELETE {}".format(self.coordinate))
+                    del self.current_board[self.coordinate]
                     self.refresh()
-                    self.board.check()
-                except ValueError:
-                    continue
-                except InvalidValueError as ive:
-                    for row, col in ive.fails:
-                        if ive.fails[(row, col)]:
-                            ch = str(self.board[(row, col)]) if (row, col) in self.board else " "
-                            self.screen.addch(*self.cursor(row, col), ch, curses.color_pair(1))
-            self.screen.move(*self.cursor())
+                    self.current_board.check()
+                else:
+                    try:
+                        i = int(ch)
+                        self.current_board[self.coordinate] = i
+                        self.refresh()
+                        self.message("INSERT {}: {}".format(self.coordinate, i))
+                    except ValueError:
+                        continue
+            elif self.coordinate in self.board:
+                self.message("Cannot Alter Start Cell {}".format(self.coordinate))
+            else:
+                self.message("UNRECOGNIZED KEY '{}'".format(ch))
 
 
 if __name__ == '__main__':

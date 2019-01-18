@@ -132,8 +132,9 @@ class Board(dict):
                         else:
                             values.add(value)
 
-        if len(fails):
-            raise InvalidValueError("Invalid Solution".format(), fails)
+        return fails
+        # if len(fails):
+        #     raise InvalidValueError("Invalid Solution".format(), fails)
 
     def __repr__(self):
         lines = []
