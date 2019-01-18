@@ -115,7 +115,7 @@ class CursesBoard:
             elif ch == 'KEY_RIGHT':
                 self.col += 1
             elif self.coordinate not in self.board:
-                if ch in {'KEY_DC', 'KEY_BACKSPACE', ' '}:
+                if self.coordinate in self.current_board and ch in {'KEY_DC', 'KEY_BACKSPACE', ' '}:
                     self.message("DELETE {}".format(self.coordinate))
                     del self.current_board[self.coordinate]
                     self.refresh()
