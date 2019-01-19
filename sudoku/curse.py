@@ -139,10 +139,11 @@ class CursesBoard:
         self.screen.move(*self.cursor())
 
     def clear_cell(self):
-        self.message("CLEAR  {}".format(self.coordinate))
-        del self.current_board[self.coordinate]
-        self.refresh()
-        self.current_board.check()
+        if self.coordinate in self.current_board:
+            self.message("CLEAR  {}".format(self.coordinate))
+            del self.current_board[self.coordinate]
+            self.refresh()
+            self.current_board.check()
 
     def mainloop(self):
         while True:
