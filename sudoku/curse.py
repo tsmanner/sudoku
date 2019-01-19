@@ -1,16 +1,50 @@
 import curses
 import getpass
+import inspect # For linenumber debugging
 from sudoku import Board, InvalidValueError, cull_board, generate_board
+
+
+class CursesFrame:
+    attributes = {
+        "window",
+        "pary",
+        "parx",
+        "maxy",
+        "maxx",
+    }
+
+    def __init__(self, window):
+        self.window = window
+        self.pary, self.parx = window.getparyx()
+        self.maxy, self.maxx = (i - 1 for i in window.getmaxyx())
+
+    def __getattr__(self, attr):
+        if attr in CursesFrame.attributes:
+            return self.__getattribute__(attr)
+        return self.window.__getattribute__(attr)
+
+    def __setattr__(self, key, value):
+        if key in CursesFrame.attributes:
+            object.__setattr__(self, key, value)
+        else:
+            self.window.__setattr__(key, value)
 
 
 class CursesBoard:
     def __init__(self, screen):
         self.screen = screen
         curses.init_pair(1, curses.COLOR_RED, curses.COLOR_BLACK)
+        # self.board = Board(3)
         self.board = cull_board(generate_board(), 0.6)
         self.current_board = Board(self.board)
         self._row = 0
         self._col = 0
+        self.max_row = self.board.rows + self.board.rows // self.board.unit
+        self.max_col = 2 * (self.board.cols + self.board.cols // self.board.unit)
+        self.board_win = CursesFrame(self.screen.subwin(self.max_row+2, self.max_col+2, 0, 0))
+        self.message_win = CursesFrame(self.screen.subwin(1, curses.COLS-1, self.board_win.pary + self.board_win.maxy, 0))
+        self.help_win = CursesFrame(self.screen.subwin(1, curses.COLS-1, self.message_win.pary + self.message_win.maxy + 1, 0))
+        self.board_win.refresh()
         self.initialize()
         self.mainloop()
 
@@ -50,32 +84,36 @@ class CursesBoard:
         return y, x
 
     def initialize(self):
-        max_row = self.board.rows + 1 + self.board.rows // self.board.unit
-        max_col = 2 * (self.board.cols + self.board.cols // self.board.unit)
-        for row in range(0, max_row):
-            if row % 4 == 0:  # BREAK
-                for col in range(max_col + 1):
-                    self.screen.addch(row, col, curses.ACS_HLINE)
-                if row == 0:  # TOP
-                    for col in range(0, max_col, 2 * self.board.unit + 2):
-                        self.screen.addch(row, col, curses.ACS_TTEE)
-                    self.screen.addch(row, 0, curses.ACS_ULCORNER)
-                    self.screen.addch(row, max_col, curses.ACS_URCORNER)
-                elif row == 12:  # BOTTOM
-                    for col in range(0, max_col, 2 * self.board.unit + 2):
-                        self.screen.addch(row, col, curses.ACS_BTEE)
-                    self.screen.addch(row, 0, curses.ACS_LLCORNER)
-                    self.screen.addch(row, max_col, curses.ACS_LRCORNER)
+        for row in range(0, self.board_win.maxy):
+            # HORIZONTAL BORDER
+            if row % 4 == 0:
+                for col in range(self.board_win.maxx):
+                    self.board_win.addch(row, col, curses.ACS_HLINE)
+                # TOP (UPPER CORNERs and BOTTOM TEEs)
+                if row == 0:
+                    for col in range(0, self.board_win.maxx, 2 * self.board.unit + 2):
+                        self.board_win.addch(row, col, curses.ACS_TTEE)
+                    self.board_win.addch(row, 0, curses.ACS_ULCORNER)
+                    self.board_win.addch(row, self.board_win.maxx-1, curses.ACS_URCORNER)
+                # BOTTOM (LOWER CORNERs and TOP TEEs)
+                elif row == self.board_win.maxy - 1:
+                    for col in range(0, self.board_win.maxx, 2 * self.board.unit + 2):
+                        self.board_win.addch(row, col, curses.ACS_BTEE)
+                    self.board_win.addch(row, 0, curses.ACS_LLCORNER)
+                    self.board_win.addch(row, self.board_win.maxx-1, curses.ACS_LRCORNER)
+                # MIDDLE (PLUSes, LEFT TEE, and RIGHT TEE)
                 else:
-                    for col in range(0, max_col, 2 * self.board.unit + 2):
-                        self.screen.addch(row, col, curses.ACS_PLUS)
-                    self.screen.addch(row, 0, curses.ACS_LTEE)
-                    self.screen.addch(row, max_col, curses.ACS_RTEE)
-            else:  # INTERIOR
-                for col in range(0, max_col + 1, 2 * self.board.unit + 2):
-                    self.screen.addch(row, col, curses.ACS_VLINE)
-        self.refresh()
+                    for col in range(0, self.board_win.maxx, 2 * self.board.unit + 2):
+                        self.board_win.addch(row, col, curses.ACS_PLUS)
+                    self.board_win.addch(row, 0, curses.ACS_LTEE)
+                    self.board_win.addch(row, self.board_win.maxx-1, curses.ACS_RTEE)
+            # VERTICAL BORDER
+            else:
+                for col in range(0, self.board_win.maxx, 2 * self.board.unit + 2):
+                    self.board_win.addch(row, col, curses.ACS_VLINE)
+        self.help_win.addnstr(0, 0, "^ up  v down  < left  > right  q quit", self.help_win.maxx)
         self.message("WELCOME {}!".format(getpass.getuser()).upper())
+        self.refresh()
 
     def refresh(self):
         failmask = self.current_board.check()
@@ -89,23 +127,28 @@ class CursesBoard:
                     options |= curses.A_UNDERLINE | curses.color_pair(1)
                 if (row, col) in self.board:
                     options |= curses.A_BOLD
-                self.screen.addch(*cursor, ch, options)
+                self.board_win.addch(*cursor, ch, options)
         self.screen.move(*self.cursor())
-        self.screen.refresh()
+        self.help_win.refresh()
+        self.board_win.refresh()
 
     def message(self, message):
-        self.screen.addstr(13, 0, " " * (curses.COLS - 1))
-        self.screen.addstr(13, 0, message)
+        self.message_win.clear()
+        self.message_win.addnstr(0, 0, message, self.message_win.maxx)
+        self.message_win.refresh()
         self.screen.move(*self.cursor())
-        self.screen.refresh()
+
+    def clear_cell(self):
+        self.message("CLEAR  {}".format(self.coordinate))
+        del self.current_board[self.coordinate]
+        self.refresh()
+        self.current_board.check()
 
     def mainloop(self):
         while True:
             ch = self.screen.getkey()
             if ch == 'q':
                 break
-            elif ch == '\n':
-                continue
             elif ch == 'KEY_UP':
                 self.row -= 1
             elif ch == 'KEY_DOWN':
@@ -116,22 +159,22 @@ class CursesBoard:
                 self.col += 1
             elif self.coordinate not in self.board:
                 if ch in {'KEY_DC', 'KEY_BACKSPACE', ' '}:
-                    self.message("DELETE {}".format(self.coordinate))
-                    del self.current_board[self.coordinate]
-                    self.refresh()
-                    self.current_board.check()
+                    self.clear_cell()
                 else:
                     try:
                         i = int(ch)
-                        self.current_board[self.coordinate] = i
-                        self.refresh()
-                        self.message("INSERT {}: {}".format(self.coordinate, i))
+                        if self.current_board[self.coordinate] == i:
+                            self.clear_cell()
+                        else:
+                            self.current_board[self.coordinate] = i
+                            self.refresh()
+                            self.message("INSERT {}: {}".format(self.coordinate, i))
                     except ValueError:
-                        continue
+                        self.message("UNUSED KEY {}".format(bytes(ch, "utf-8")))
             elif self.coordinate in self.board:
-                self.message("Cannot Alter Start Cell {}".format(self.coordinate))
+                self.message("Can't Alter Cell {}".format(self.coordinate))
             else:
-                self.message("UNRECOGNIZED KEY '{}'".format(ch))
+                self.message("ERROR BAD '{}'".format(self.coordinate))
 
 
 if __name__ == '__main__':
