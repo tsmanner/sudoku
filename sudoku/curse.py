@@ -2,6 +2,7 @@ import curses
 import getpass
 import inspect # For linenumber debugging
 from sudoku import Board, InvalidValueError, cull_board, generate_board
+import time
 
 
 class CursesFrame:
@@ -31,12 +32,15 @@ class CursesFrame:
 
 
 class CursesBoard:
-    def __init__(self, screen):
+    def __init__(self, screen, autostart=True):
         self.screen = screen
+        screen.timeout(50)
         curses.init_pair(1, curses.COLOR_RED, curses.COLOR_BLACK)
         # self.board = Board(3)
         self.board = cull_board(generate_board(), 0.6)
         self.current_board = Board(self.board)
+        self.default_message = "WELCOME {}!".format(getpass.getuser()).upper()
+        self.message_time = None
         self._row = 0
         self._col = 0
         self.max_row = self.board.rows + self.board.rows // self.board.unit
@@ -46,7 +50,10 @@ class CursesBoard:
         self.help_win = CursesFrame(self.screen.subwin(1, curses.COLS-1, self.message_win.pary + self.message_win.maxy + 1, 0))
         self.board_win.refresh()
         self.initialize()
-        self.mainloop()
+        self._message(self.default_message)
+        self._run = autostart
+        if self._run:
+            self.mainloop()
 
     @property
     def row(self):
@@ -112,7 +119,6 @@ class CursesBoard:
                 for col in range(0, self.board_win.maxx, 2 * self.board.unit + 2):
                     self.board_win.addch(row, col, curses.ACS_VLINE)
         self.help_win.addnstr(0, 0, "^ up  v down  < left  > right  q quit", self.help_win.maxx)
-        self.message("WELCOME {}!".format(getpass.getuser()).upper())
         self.refresh()
 
     def refresh(self):
@@ -133,6 +139,10 @@ class CursesBoard:
         self.board_win.refresh()
 
     def message(self, message):
+        self.message_time = time.time()
+        self._message(message)
+
+    def _message(self, message):
         self.message_win.clear()
         self.message_win.addnstr(0, 0, message, self.message_win.maxx)
         self.message_win.refresh()
@@ -145,11 +155,23 @@ class CursesBoard:
             self.refresh()
             self.current_board.check()
 
+    def quit(self):
+        self._run = False
+
     def mainloop(self):
-        while True:
-            ch = self.screen.getkey()
-            if ch == 'q':
-                break
+        self._run = True
+        while self._run:
+            if self.message_time and (time.time() - self.message_time) > 2:
+                self.message_time = None
+                self._message(self.default_message)
+            try:
+                ch = self.screen.getkey()
+            except curses.error:  # Handle delay getkey timeout without input
+                continue
+            if ch == -1:  # Handle delay getkey/getch timeout without input
+                continue
+            elif ch == 'q':
+                self.quit()
             elif ch == 'KEY_UP':
                 self.row -= 1
             elif ch == 'KEY_DOWN':
