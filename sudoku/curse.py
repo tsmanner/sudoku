@@ -143,6 +143,7 @@ class CursesBoard:
 
     def message(self, message, *, persist=False):
         if persist:
+            self.default_message = message
             self.message_time = None
         else:
             self.message_time = time.time()
@@ -166,9 +167,7 @@ class CursesBoard:
 
     def load(self):
         if not os.path.isfile(self.save_file):
-            self.board = cull_board(generate_board(), 0.6)
-            self.current_board = Board(self.board)
-            self.save()
+            self.new_board()
         else:
             try:
                 with open(self.save_file) as save_file:
@@ -189,9 +188,7 @@ class CursesBoard:
                             if item != "":
                                 self.current_board[(row, col)] = int(item)
             except IndexError:
-                self.board = cull_board(generate_board(), 0.6)
-                self.current_board = Board(self.board)
-                self.save()
+                self.new_board()
 
     def save(self):
         with open(self.save_file, "w") as save_file:
@@ -199,6 +196,14 @@ class CursesBoard:
             save_file.write("\n")
             self.current_board.to_csv(save_file)
             save_file.write("\n")
+
+    def new_board(self):
+        self.message("Generating New Board...")
+        self.board = cull_board(generate_board(), 0.6)
+        self.current_board = Board(self.board)
+        self.save()
+        self.refresh()
+        self.message("New Board Generated!")
 
     def mainloop(self):
         self._run = True
@@ -212,8 +217,10 @@ class CursesBoard:
                 continue
             if ch == -1:  # Handle delay getkey/getch timeout without input
                 continue
-            elif ch == 'q':
+            elif ch == 'q':  # Quit
                 self.quit()
+            elif ch == 'n':  # New Board
+                self.new_board()
             elif ch == 'KEY_UP':
                 self.row -= 1
             elif ch == 'KEY_DOWN':
