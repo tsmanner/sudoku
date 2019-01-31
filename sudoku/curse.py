@@ -1,6 +1,8 @@
 import curses
 import getpass
 import inspect # For linenumber debugging
+import math
+import os
 from sudoku import Board, InvalidValueError, cull_board, generate_board
 import time
 
@@ -32,13 +34,14 @@ class CursesFrame:
 
 
 class CursesBoard:
-    def __init__(self, screen, autostart=True):
+    def __init__(self, screen, autostart=True, save_file=None):
         self.screen = screen
         screen.timeout(50)
         curses.init_pair(1, curses.COLOR_RED, curses.COLOR_BLACK)
-        # self.board = Board(3)
-        self.board = cull_board(generate_board(), 0.6)
-        self.current_board = Board(self.board)
+        self.save_file = save_file if save_file else os.path.join(os.path.expanduser("~"), ".sudoku")
+        self.board = None
+        self.current_board = None
+        self.load()
         self.default_message = "WELCOME {}!".format(getpass.getuser()).upper()
         self.message_time = None
         self._row = 0
@@ -50,7 +53,7 @@ class CursesBoard:
         self.help_win = CursesFrame(self.screen.subwin(1, curses.COLS-1, self.message_win.pary + self.message_win.maxy + 1, 0))
         self.board_win.refresh()
         self.initialize()
-        self._message(self.default_message)
+        self.message(self.default_message)
         self._run = autostart
         if self._run:
             self.mainloop()
@@ -138,11 +141,11 @@ class CursesBoard:
         self.help_win.refresh()
         self.board_win.refresh()
 
-    def message(self, message):
-        self.message_time = time.time()
-        self._message(message)
-
-    def _message(self, message):
+    def message(self, message, *, persist=False):
+        if persist:
+            self.message_time = None
+        else:
+            self.message_time = time.time()
         self.message_win.clear()
         self.message_win.addnstr(0, 0, message, self.message_win.maxx)
         self.message_win.refresh()
@@ -155,15 +158,54 @@ class CursesBoard:
             self.refresh()
             self.current_board.check()
 
+    def exit(self):
+        self.save()
+
     def quit(self):
         self._run = False
+
+    def load(self):
+        if not os.path.isfile(self.save_file):
+            self.board = cull_board(generate_board(), 0.6)
+            self.current_board = Board(self.board)
+            self.save()
+        else:
+            try:
+                with open(self.save_file) as save_file:
+                    lines = [[cell.strip() for cell in line.split(',')] for line in save_file.readlines()]
+                    # [print(line) for line in lines]
+                    # time.sleep(60)
+                    dimension = len(lines[0])
+                    self.board = Board(int(math.sqrt(dimension)))
+                    self.current_board = Board(int(math.sqrt(dimension)))
+                    for row in range(dimension):
+                        for col in range(dimension):
+                            # Get the root board item
+                            item = lines[row][col]
+                            if item != "":
+                                self.board[(row, col)] = int(item)
+                            # Get the current board item
+                            item = lines[row+dimension][col]
+                            if item != "":
+                                self.current_board[(row, col)] = int(item)
+            except IndexError:
+                self.board = cull_board(generate_board(), 0.6)
+                self.current_board = Board(self.board)
+                self.save()
+
+    def save(self):
+        with open(self.save_file, "w") as save_file:
+            self.board.to_csv(save_file)
+            save_file.write("\n")
+            self.current_board.to_csv(save_file)
+            save_file.write("\n")
 
     def mainloop(self):
         self._run = True
         while self._run:
             if self.message_time and (time.time() - self.message_time) > 2:
+                self.message(self.default_message, persist=False)
                 self.message_time = None
-                self._message(self.default_message)
             try:
                 ch = self.screen.getkey()
             except curses.error:  # Handle delay getkey timeout without input
@@ -198,6 +240,7 @@ class CursesBoard:
                 self.message("Can't Alter Cell {}".format(self.coordinate))
             else:
                 self.message("ERROR BAD '{}'".format(self.coordinate))
+        self.exit()
 
 
 if __name__ == '__main__':

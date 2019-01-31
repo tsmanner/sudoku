@@ -1,4 +1,5 @@
 from collections import defaultdict
+import io
 import numpy
 from typing import Union
 
@@ -133,8 +134,6 @@ class Board(dict):
                             values.add(value)
 
         return fails
-        # if len(fails):
-        #     raise InvalidValueError("Invalid Solution".format(), fails)
 
     def __repr__(self):
         lines = []
@@ -153,10 +152,23 @@ class Board(dict):
         lines.append(divider)
         return '\n'.join(lines)
 
+    def to_csv(self, output=None):
+        lines = []
+        for row in range(self.rows):
+            lines.append(', '.join([str(item) if item is not None else "" for item in self.row(row)]))
+        csv_content = '\n'.join(lines)
+        if isinstance(output, str):
+            with open(output, "w") as fl:
+                fl.write(csv_content)
+        elif isinstance(output, io.IOBase):
+            output.write(csv_content)
+        else:
+            return csv_content
+
 
 def generate_board(unit=3, max_attempts=10000):
-    max_row = row = i = 0
-    for i in range(1, 1 + max_attempts):
+    max_row = row = 0
+    for _ in range(1, 1 + max_attempts):
         board = Board(unit)
         try:
             for row in range(board.rows):
@@ -169,12 +181,9 @@ def generate_board(unit=3, max_attempts=10000):
                         )
                     )
                     board[row][col] = numpy.random.choice(available)
-            # print("\rMax Row {:>2} after {} attempts".format(max_row, i))
             return board
         except ValueError:
             max_row = row if row > max_row else max_row
-            # print("\rMax Row {:>2} after {} attempts".format(max_row, i), end='')
-    # print("\rMax Row {:>2} after {} attempts".format(max_row, i))
     return None
 
 
@@ -190,7 +199,7 @@ def cull_board(board, cull_value):
         )
     if number_to_delete > len(board_copy):
         number_to_delete = len(board_copy)
-    for i in range(number_to_delete):
+    for _ in range(number_to_delete):
         keys = list(board_copy.keys())
         key = keys[numpy.random.choice(len(keys))]
         del board_copy[key]
