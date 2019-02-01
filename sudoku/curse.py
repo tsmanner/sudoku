@@ -39,9 +39,8 @@ class CursesBoard:
         screen.timeout(50)
         curses.init_pair(1, curses.COLOR_RED, curses.COLOR_BLACK)
         self.save_file = save_file if save_file else os.path.join(os.path.expanduser("~"), ".sudoku")
-        self.board = None
-        self.current_board = None
-        self.load()
+        self.board = Board(3)
+        self.current_board = Board(self.board)
         self.default_message = "WELCOME {}!".format(getpass.getuser()).upper()
         self.message_time = None
         self._row = 0
@@ -52,8 +51,9 @@ class CursesBoard:
         self.message_win = CursesFrame(self.screen.subwin(1, curses.COLS-1, self.board_win.pary + self.board_win.maxy, 0))
         self.help_win = CursesFrame(self.screen.subwin(1, curses.COLS-1, self.message_win.pary + self.message_win.maxy + 1, 0))
         self.board_win.refresh()
-        self.initialize()
         self.message(self.default_message)
+        self.load()
+        self.initialize()
         self._run = autostart
         if self._run:
             self.mainloop()
